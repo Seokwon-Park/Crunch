@@ -3,24 +3,38 @@
 
 #include "Character/CCharacter.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GAS/CAbilitySystemComponent.h"
 #include "GAS/CAttributeSet.h"
-
+#include "GAS/CAbilitySystemStatics.h"
+#include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
+#include "Widgets/OverHeadStatsGauge.h"
+#include "Perception/AIPerceptionStimuliSourceComponent.h"
+#include "Perception/AISense_Sight.h"
 // Sets default values
 ACCharacter::ACCharacter()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	CAbilitySystemComponent = CreateDefaultSubobject<UCAbilitySystemComponent>("CAbility System Component");
 	CAttributeSet = CreateDefaultSubobject<UCAttributeSet>("CAttribute Set");
+	OverHeadWidgetComponent = CreateDefaultSubobject<UWidgetComponent>("Over Head Widget Component");
+	OverHeadWidgetComponent->SetupAttachment(GetRootComponent());
+
+	PerceptionStimuliSourceComponent = CreateDefaultSubobject<UAIPerceptionStimuliSourceComponent>("Perception Stimuli Source Component");
+
 }
 
 void ACCharacter::ServerSideInit()
 {
 	CAbilitySystemComponent->InitAbilityActorInfo(this, this);
 	CAbilitySystemComponent->ApplyInitialEffects();
+	CAbilitySystemComponent->GiveInitialAbilities();
 }
 
 void ACCharacter::ClientSideInit()
@@ -28,11 +42,35 @@ void ACCharacter::ClientSideInit()
 	CAbilitySystemComponent->InitAbilityActorInfo(this, this);
 }
 
+bool ACCharacter::IsLocallyControlledByPlayer() const
+{
+	return GetController() && GetController()->IsLocalPlayerController();
+}
+
+void ACCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ACCharacter, TeamID)
+}
+
 // Called when the game starts or when spawned
 void ACCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+	ConfigureOverHeadStatusWidget();
+	BindGASChangeDelegates();
+	MeshRelativeTransform = GetMesh()->GetRelativeTransform();
+
+	PerceptionStimuliSourceComponent->RegisterForSense(UAISense_Sight::StaticClass());
+}
+
+void ACCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	if (NewController && !NewController->IsPlayerController())
+	{
+		ServerSideInit();
+	}
 }
 
 // Called every frame
@@ -54,3 +92,169 @@ UAbilitySystemComponent* ACCharacter::GetAbilitySystemComponent() const
 	return CAbilitySystemComponent;
 }
 
+void ACCharacter::BindGASChangeDelegates()
+{
+	if (CAbilitySystemComponent)
+	{
+		CAbilitySystemComponent->RegisterGameplayTagEvent(UCAbilitySystemStatics::GetDeadStatTag()).AddUObject(this, &ACCharacter::DeathTagUpdated);
+	}
+}
+
+void ACCharacter::DeathTagUpdated(const FGameplayTag Tag, int32 NewCount)
+{
+	if (NewCount != 0)
+	{
+		StartDeathSequence();
+	}
+	else
+	{
+		Respawn();
+	}
+}
+
+void ACCharacter::ConfigureOverHeadStatusWidget()
+{
+	if (!OverHeadWidgetComponent)
+	{
+		return;
+	}
+
+	if (IsLocallyControlledByPlayer())
+	{
+		OverHeadWidgetComponent->SetHiddenInGame(true);
+		return;
+	}
+
+	UOverHeadStatsGauge* OverheadStatsGuage = Cast<UOverHeadStatsGauge>(OverHeadWidgetComponent->GetUserWidgetObject());
+	if (OverheadStatsGuage)
+	{
+		OverheadStatsGuage->ConfigureWithASC(GetAbilitySystemComponent());
+		OverHeadWidgetComponent->SetHiddenInGame(false);
+		GetWorldTimerManager().ClearTimer(HeadStatGaugeVisibilityUpdateTimerHandle);
+		GetWorldTimerManager().SetTimer(HeadStatGaugeVisibilityUpdateTimerHandle, this, &ACCharacter::UpdateHeadGaugeVisibility, HeadStatGaugeVisibilityRangeSquared, true);
+	}
+}
+
+void ACCharacter::UpdateHeadGaugeVisibility()
+{
+	APawn* LocalPlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (LocalPlayerPawn)
+	{
+		float DistSquared = FVector::DistSquared(GetActorLocation(), LocalPlayerPawn->GetActorLocation());
+		OverHeadWidgetComponent->SetHiddenInGame(DistSquared > HeadStatGaugeVisibilityRangeSquared);
+	}
+}
+
+void ACCharacter::SetStatusGaugeEnabled(bool bIsEnabled)
+{
+	GetWorldTimerManager().ClearTimer(HeadStatGaugeVisibilityUpdateTimerHandle);
+	if (bIsEnabled)
+	{
+		ConfigureOverHeadStatusWidget();
+	}
+	else
+	{
+		OverHeadWidgetComponent->SetHiddenInGame(true);
+	}
+}
+
+void ACCharacter::DeathMontageFinished()
+{
+	SetRagdollEnabled(true);
+}
+
+void ACCharacter::SetRagdollEnabled(bool bIsEnabled)
+{
+	if (bIsEnabled)
+	{
+		GetMesh()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		GetMesh()->SetSimulatePhysics(true);
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+	}
+	else
+	{
+
+		GetMesh()->SetSimulatePhysics(false);
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		GetMesh()->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+		GetMesh()->SetRelativeTransform(MeshRelativeTransform);
+	}
+}
+
+void ACCharacter::PlayDeathAnimation()
+{
+	if (DeathMontage)
+	{
+		float MontageDuration = PlayAnimMontage(DeathMontage);
+		GetWorldTimerManager().SetTimer(DeathMontageTimerHandle, this, &ACCharacter::DeathMontageFinished, MontageDuration + DeathMontageFinishTimeShift);
+	}
+}
+
+void ACCharacter::StartDeathSequence()
+{
+	OnDead();
+	PlayDeathAnimation();
+	SetStatusGaugeEnabled(false);
+
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_None);
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetAIPerceptionStimuliSourceEnabled(false);
+}
+
+void ACCharacter::Respawn()
+{
+	OnRespawn();
+	SetAIPerceptionStimuliSourceEnabled(true);
+	SetRagdollEnabled(false);
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+	GetMesh()->GetAnimInstance()->StopAllMontages(0.f);
+	SetStatusGaugeEnabled(true);
+
+	if (HasAuthority() && GetController())
+	{
+		TWeakObjectPtr<AActor> StartSpot = GetController()->StartSpot;
+		if (StartSpot.IsValid())
+		{
+			SetActorTransform(StartSpot->GetActorTransform());
+		}
+	}
+
+	if (CAbilitySystemComponent)
+	{
+		CAbilitySystemComponent->ApplyFullStatEffect();
+	}
+}
+
+void ACCharacter::OnDead()
+{
+}
+
+void ACCharacter::OnRespawn()
+{
+}
+
+void ACCharacter::SetGenericTeamId(const FGenericTeamId& NewTeamID)
+{
+	TeamID = NewTeamID;
+}
+
+FGenericTeamId ACCharacter::GetGenericTeamId() const
+{
+	return TeamID;
+}
+
+void ACCharacter::SetAIPerceptionStimuliSourceEnabled(bool bIsEnabled)
+{
+	if (!PerceptionStimuliSourceComponent)
+		return;
+
+	if (bIsEnabled)
+	{
+		PerceptionStimuliSourceComponent->RegisterWithPerceptionSystem();
+	}
+	else
+	{
+		PerceptionStimuliSourceComponent->UnregisterFromPerceptionSystem();
+	}
+}

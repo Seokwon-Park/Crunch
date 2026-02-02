@@ -2,6 +2,7 @@
 
 
 #include "Player/CPlayerCharacter.h"
+#include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -18,7 +19,7 @@ ACPlayerCharacter::ACPlayerCharacter()
 
 	ViewCam = CreateDefaultSubobject<UCameraComponent>("View Cam");
 	ViewCam->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
-	
+
 	bUseControllerRotationYaw = false;
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -39,7 +40,7 @@ void ACPlayerCharacter::PawnClientRestart()
 			InputSubsystem->AddMappingContext(GameplayInputMappingContext, 0);
 		}
 	}
-	
+
 }
 
 void ACPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -51,6 +52,11 @@ void ACPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		EnhancedInputComp->BindAction(JumpInputAction, ETriggerEvent::Triggered, this, &ACPlayerCharacter::Jump);
 		EnhancedInputComp->BindAction(LookInputAction, ETriggerEvent::Triggered, this, &ACPlayerCharacter::HandleLookInput);
 		EnhancedInputComp->BindAction(MoveInputAction, ETriggerEvent::Triggered, this, &ACPlayerCharacter::HandleMoveInput);
+
+		for (const TPair<ECAbilityInputID, UInputAction*>& InputActionPair : GameplayAbilityInputActions)
+		{
+			EnhancedInputComp->BindAction(InputActionPair.Value, ETriggerEvent::Triggered, this, &ACPlayerCharacter::HandleAbilityInput, InputActionPair.Key);
+		}
 	}
 }
 
@@ -64,10 +70,45 @@ void ACPlayerCharacter::HandleLookInput(const FInputActionValue& InputActionValu
 void ACPlayerCharacter::HandleMoveInput(const FInputActionValue& InputActionValue)
 {
 	FVector2D InputVal = InputActionValue.Get<FVector2D>();
-	
+
 	InputVal.Normalize();
 	AddMovementInput(GetMoveFwdDir() * InputVal.Y + GetLookRightDir() * InputVal.X);
 }
+
+void ACPlayerCharacter::HandleAbilityInput(const FInputActionValue& InputActionValue, ECAbilityInputID InputID)
+{
+	bool bPressed = InputActionValue.Get<bool>();
+	if (bPressed)
+	{
+		GetAbilitySystemComponent()->AbilityLocalInputPressed((int32)InputID);
+	}
+	else
+	{
+		GetAbilitySystemComponent()->AbilityLocalInputReleased((int32)InputID);
+	}
+
+}
+
+void ACPlayerCharacter::OnDead()
+{
+	UE_LOG(LogTemp, Warning, TEXT("DisableInput"));
+
+	APlayerController* PlayerController = GetController<APlayerController>();
+	if (PlayerController)
+	{
+		DisableInput(PlayerController);
+	}
+}
+
+void ACPlayerCharacter::OnRespawn()
+{
+	APlayerController* PlayerController = GetController<APlayerController>();
+	if (PlayerController)
+	{
+		EnableInput(PlayerController);
+	}
+}
+
 
 FVector ACPlayerCharacter::GetLookRightDir() const
 {

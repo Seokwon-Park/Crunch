@@ -13,20 +13,20 @@ void UValueGauge::NativePreConstruct()
 	ProgressBar->SetFillColorAndOpacity(BarColor);
 }
 
-void UValueGauge::SetAndBoundToGameplayAttirbute(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayAttribute& Attribute, const FGameplayAttribute NewAttribute)
+void UValueGauge::SetAndBoundToGameplayAttirbute(UAbilitySystemComponent* AbilitySystemComponent, const FGameplayAttribute& Attribute, const FGameplayAttribute MaxAttribute)
 {
 	if (AbilitySystemComponent)
 	{
 		bool bFound;
 		float Value = AbilitySystemComponent->GetGameplayAttributeValue(Attribute, bFound);
-		float MaxValue = AbilitySystemComponent->GetGameplayAttributeValue(Attribute, bFound);
+		float MaxValue = AbilitySystemComponent->GetGameplayAttributeValue(MaxAttribute, bFound);
 		if (bFound)
 		{
 			SetValue(Value, MaxValue);
 		}
 
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Attribute).AddUObject(this, &UValueGauge::ValueChanged);
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(Attribute).AddUObject(this, &UValueGauge::MaxValueChanged);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(MaxAttribute).AddUObject(this, &UValueGauge::MaxValueChanged);
 	}
 }
 
