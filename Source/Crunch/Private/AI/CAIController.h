@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "GameplayTagContainer.h"
 #include "CAIController.generated.h"
 
 /**
@@ -41,5 +42,10 @@ private:
 	AActor* GetNextPerceivedActor() const;
 
 	void ForgetDeadActor(AActor* ActorToForget);
+
+	void ClearAndDisableAllSenses();
+	void EnableAllSenses();
+
+	void PawnDeadTagUpdated(const FGameplayTag Tag, int32 Count);
 
 };

@@ -27,7 +27,7 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-public:	
+public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
@@ -71,6 +71,11 @@ private:
 	/****************************************************************************************/
 	/*									Death And Respawn									*/
 	/****************************************************************************************/
+public:
+	bool IsDead() const;
+	void RespawnImmediately() const;
+private:
+
 	FTransform MeshRelativeTransform;
 	UPROPERTY(EditDefaultsOnly, Category = "Death")
 	float DeathMontageFinishTimeShift = -0.8f;
@@ -100,8 +105,11 @@ public:
 	/** Retrieve team identifier in form of FGenericTeamId */
 	virtual FGenericTeamId GetGenericTeamId() const override;
 private:
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_TeamID)
 	FGenericTeamId TeamID;
+
+	UFUNCTION()
+	virtual void OnRep_TeamID();
 	/****************************************************************************************/
 	/*										AI												*/
 	/****************************************************************************************/
