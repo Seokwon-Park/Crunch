@@ -51,6 +51,14 @@ private:
 	void HandleLookInput(const FInputActionValue& InputActionValue);
 	void HandleMoveInput(const FInputActionValue& InputActionValue);
 	void HandleAbilityInput(const FInputActionValue& InputActionValue, ECAbilityInputID InputID);
+	void SetInputEnabledFromPlayerController(bool bIsEnabled);
+
+
+	/****************************************************************************************/
+	/*									Stun												*/
+	/****************************************************************************************/
+	virtual void OnStun() override;
+	virtual void OnRecoveredFromStun() override;
 
 
 

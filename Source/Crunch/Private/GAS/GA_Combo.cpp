@@ -17,9 +17,9 @@ UGA_Combo::UGA_Combo()
 
 void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
-	if (!K2_CommitAbility())
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
-		K2_EndAbility();
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
 
@@ -37,7 +37,7 @@ void UGA_Combo::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const F
 		WaitComboChangeEventTask->ReadyForActivation();
 	}
 
-	if (K2_HasAuthority())
+	if(HasAuthority(&ActivationInfo))
 	{
 		UAbilityTask_WaitGameplayEvent* WaitTargetingEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, GetComboTargetEventTag());
 		WaitTargetingEventTask->EventReceived.AddDynamic(this, &UGA_Combo::DoDamage);
@@ -112,7 +112,7 @@ void UGA_Combo::ComboChangedEventReceived(FGameplayEventData Data)
 	if (EventTag == GetComboChangedEventEndTag())
 	{
 		NextComboName = NAME_None;
-		UE_LOG(LogTemp, Warning, TEXT("next combo is cleared"));
+		//UE_LOG(LogTemp, Warning, TEXT("next combo is cleared"));
 
 		return;
 	}
@@ -121,7 +121,7 @@ void UGA_Combo::ComboChangedEventReceived(FGameplayEventData Data)
 	UGameplayTagsManager::Get().SplitGameplayTagFName(EventTag, TagNames);
 	NextComboName = TagNames.Last();
 
-	UE_LOG(LogTemp, Warning, TEXT("next combo is now :%s"), *NextComboName.ToString());
+	//UE_LOG(LogTemp, Warning, TEXT("next combo is now :%s"), *NextComboName.ToString());
 }
 
 void UGA_Combo::DoDamage(FGameplayEventData Data)
@@ -131,13 +131,6 @@ void UGA_Combo::DoDamage(FGameplayEventData Data)
 	for (const FHitResult& HitResult : HitResults)
 	{
 		TSubclassOf<UGameplayEffect> GameplayEffect = GetDamageEffectForCurrentCombo();
-		FGameplayEffectSpecHandle EffectSpecHandle = MakeOutgoingGameplayEffectSpec(GameplayEffect, GetAbilityLevel(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
-
-		FGameplayEffectContextHandle EffectContext = MakeEffectContext(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo());
-		EffectContext.AddHitResult(HitResult);
-
-		EffectSpecHandle.Data->SetContext(EffectContext);
-
-		ApplyGameplayEffectSpecToTarget(GetCurrentAbilitySpecHandle(), CurrentActorInfo, CurrentActivationInfo, EffectSpecHandle, UAbilitySystemBlueprintLibrary::AbilityTargetDataFromActor(HitResult.GetActor()));
+		ApplyGameplayEffectToHitResultActor(HitResult, GameplayEffect, GetAbilityLevel(CurrentSpecHandle, CurrentActorInfo));
 	}
 }

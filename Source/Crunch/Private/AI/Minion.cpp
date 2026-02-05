@@ -25,11 +25,8 @@ void AMinion::SetGoal(AActor* Goal)
 {
 	if (AAIController* AIController = GetController<AAIController>())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AIControllerIsNotNull"))
-
 		if (UBlackboardComponent* BlackboardComponent = AIController->GetBlackboardComponent())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("BB Is Not Null"))
 			BlackboardComponent->SetValueAsObject(GoalBlackboardKeyName, Goal);
 		}
 	}

@@ -6,6 +6,7 @@
 #include "Components/WidgetComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 #include "GAS/CAbilitySystemComponent.h"
 #include "GAS/CAttributeSet.h"
 #include "GAS/CAbilitySystemStatics.h"
@@ -92,11 +93,22 @@ UAbilitySystemComponent* ACCharacter::GetAbilitySystemComponent() const
 	return CAbilitySystemComponent;
 }
 
+bool ACCharacter::Server_SendGameplayEventToSelf_Validate(const FGameplayTag& EventTag, const FGameplayEventData& EventData)
+{
+	return true;
+}
+
+void ACCharacter::Server_SendGameplayEventToSelf_Implementation(const FGameplayTag& EventTag, const FGameplayEventData& EventData)
+{
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, EventTag, EventData);
+}
+
 void ACCharacter::BindGASChangeDelegates()
 {
 	if (CAbilitySystemComponent)
 	{
 		CAbilitySystemComponent->RegisterGameplayTagEvent(UCAbilitySystemStatics::GetDeadStatTag()).AddUObject(this, &ACCharacter::DeathTagUpdated);
+		CAbilitySystemComponent->RegisterGameplayTagEvent(UCAbilitySystemStatics::GetStunStatTag()).AddUObject(this, &ACCharacter::StunTagUpdated);
 	}
 }
 
@@ -109,6 +121,22 @@ void ACCharacter::DeathTagUpdated(const FGameplayTag Tag, int32 NewCount)
 	else
 	{
 		Respawn();
+	}
+}
+
+void ACCharacter::StunTagUpdated(const FGameplayTag Tag, int32 NewCount)
+{
+	if (IsDead()) return;
+
+	if (NewCount != 0)
+	{
+		OnStun();
+		PlayAnimMontage(StunMontage);
+	}
+	else
+	{
+		OnRecoveredFromStun();
+		StopAnimMontage(StunMontage);
 	}
 }
 
@@ -216,7 +244,7 @@ void ACCharacter::StartDeathSequence()
 	PlayDeathAnimation();
 	SetStatusGaugeEnabled(false);
 
-	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_None);
+	//GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_None);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SetAIPerceptionStimuliSourceEnabled(false);
 }
@@ -227,7 +255,7 @@ void ACCharacter::Respawn()
 	SetAIPerceptionStimuliSourceEnabled(true);
 	SetRagdollEnabled(false);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+	//GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
 	GetMesh()->GetAnimInstance()->StopAllMontages(0.f);
 	SetStatusGaugeEnabled(true);
 

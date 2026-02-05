@@ -2,8 +2,17 @@
 
 
 #include "GAS/CGameplayAbility.h"
+#include "GAS/GAP_Launched.h"
+#include "GAS/CAbilitySystemStatics.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "AbilitySystemBlueprintLibrary.h"
+
+UCGameplayAbility::UCGameplayAbility()
+{
+	ActivationBlockedTags.AddTag(UCAbilitySystemStatics::GetStunStatTag());
+}
 
 UAnimInstance* UCGameplayAbility::GetOwnerAnimInstance() const
 {
@@ -65,3 +74,50 @@ TArray<FHitResult> UCGameplayAbility::GetHitResultFromSweepLocationTargetData(co
 	return OutResults;
 
 }
+
+void UCGameplayAbility::PushSelf(const FVector& PushVelocity)
+{
+	ACharacter* OwningAvatarCharacter = GetOwningAvatarCharacter();
+	if (OwningAvatarCharacter)
+	{
+		OwningAvatarCharacter->LaunchCharacter(PushVelocity, true, true);
+	}
+}
+
+void UCGameplayAbility::PushTarget(AActor* Target, const FVector& PushVelocity)
+{
+	if (!Target)return;
+	
+	FGameplayEventData EventData;
+
+	FGameplayAbilityTargetData_SingleTargetHit* HitData = new FGameplayAbilityTargetData_SingleTargetHit;
+	FHitResult HitResult;
+	HitResult.ImpactNormal = PushVelocity;
+	HitData->HitResult = HitResult;
+	EventData.TargetData.Add(HitData);
+
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Target, UGAP_Launched::GetLaunchedAbilityActivationTag(), EventData);
+
+}
+
+ACharacter* UCGameplayAbility::GetOwningAvatarCharacter()
+{
+	if (!AvatarCharacter)
+	{
+		AvatarCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	}
+	return AvatarCharacter;
+}
+
+void UCGameplayAbility::ApplyGameplayEffectToHitResultActor(const FHitResult& HitResult, TSubclassOf<UGameplayEffect> GameplayEffect, int Level)
+{
+	FGameplayEffectSpecHandle EffectSpecHandle = MakeOutgoingGameplayEffectSpec(GameplayEffect, Level);
+
+	FGameplayEffectContextHandle EffectContext = MakeEffectContext(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo());
+	EffectContext.AddHitResult(HitResult);
+
+	EffectSpecHandle.Data->SetContext(EffectContext);
+
+	ApplyGameplayEffectSpecToTarget(GetCurrentAbilitySpecHandle(), CurrentActorInfo, CurrentActivationInfo, EffectSpecHandle, UAbilitySystemBlueprintLibrary::AbilityTargetDataFromActor(HitResult.GetActor()));
+}
+

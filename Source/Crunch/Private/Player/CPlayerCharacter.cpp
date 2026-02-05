@@ -3,6 +3,8 @@
 
 #include "Player/CPlayerCharacter.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "GAS/CAbilitySystemStatics.h"
 #include "Camera/CameraComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -87,26 +89,49 @@ void ACPlayerCharacter::HandleAbilityInput(const FInputActionValue& InputActionV
 		GetAbilitySystemComponent()->AbilityLocalInputReleased((int32)InputID);
 	}
 
+	if (InputID == ECAbilityInputID::BasicAttack)
+	{
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(this, UCAbilitySystemStatics::GetBasicAttackInputPressedTag(), FGameplayEventData());
+		Server_SendGameplayEventToSelf(UCAbilitySystemStatics::GetBasicAttackInputPressedTag(), FGameplayEventData());
+	}
+
 }
 
-void ACPlayerCharacter::OnDead()
+void ACPlayerCharacter::SetInputEnabledFromPlayerController(bool bIsEnabled)
 {
-	UE_LOG(LogTemp, Warning, TEXT("DisableInput"));
-
 	APlayerController* PlayerController = GetController<APlayerController>();
-	if (PlayerController)
+	if (!PlayerController)
+		return;
+
+	if (bIsEnabled)
+	{
+		EnableInput(PlayerController);
+	}
+	else
 	{
 		DisableInput(PlayerController);
 	}
 }
 
+void ACPlayerCharacter::OnStun()
+{
+	SetInputEnabledFromPlayerController(false);
+}
+
+void ACPlayerCharacter::OnRecoveredFromStun()
+{
+	if (IsDead()) return;
+	SetInputEnabledFromPlayerController(true);
+}
+
+void ACPlayerCharacter::OnDead()
+{
+	SetInputEnabledFromPlayerController(false);
+}
+
 void ACPlayerCharacter::OnRespawn()
 {
-	APlayerController* PlayerController = GetController<APlayerController>();
-	if (PlayerController)
-	{
-		EnableInput(PlayerController);
-	}
+	SetInputEnabledFromPlayerController(true);
 }
 
 
