@@ -7,6 +7,7 @@
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
 #include "GenericTeamAgentInterface.h"
+#include "GAS/CGameplayAbilityTypes.h"
 #include "CCharacter.generated.h"
 
 UCLASS()
@@ -21,6 +22,7 @@ public:
 	void ClientSideInit();
 	bool IsLocallyControlledByPlayer() const;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	const TMap<ECAbilityInputID, TSubclassOf<UGameplayAbility>>& GetAbilities() const;
 	virtual void PossessedBy(AController* NewController) override;
 
 protected:
@@ -45,8 +47,11 @@ public:
 private:
 	void BindGASChangeDelegates();
 	void DeathTagUpdated(const FGameplayTag Tag, int32 NewCount);
-
 	void StunTagUpdated(const FGameplayTag Tag, int32 NewCount);
+	void AimTagUpdated(const FGameplayTag Tag, int32 NewCount);
+	void SetAimming(bool bIsAimming);
+	virtual void OnAimStateChanged(bool bIsAimming);
+
 
 	UPROPERTY(VisibleDefaultsOnly, Category = "Gameplay Ability")
 	class UCAbilitySystemComponent* CAbilitySystemComponent;

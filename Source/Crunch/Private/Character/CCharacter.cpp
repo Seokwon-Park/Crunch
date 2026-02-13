@@ -5,6 +5,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Crunch/Crunch.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GAS/CAbilitySystemComponent.h"
@@ -15,12 +16,14 @@
 #include "Widgets/OverHeadStatsGauge.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
-// Sets default values
+// Sets default values 
 ACCharacter::ACCharacter()
 {
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_SpringArm, ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Target, ECR_Ignore);
 
 	CAbilitySystemComponent = CreateDefaultSubobject<UCAbilitySystemComponent>("CAbility System Component");
 	CAttributeSet = CreateDefaultSubobject<UCAttributeSet>("CAttribute Set");
@@ -52,6 +55,11 @@ void ACCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ACCharacter, TeamID)
+}
+
+const TMap<ECAbilityInputID, TSubclassOf<UGameplayAbility>>& ACCharacter::GetAbilities() const
+{
+	return CAbilitySystemComponent->GetAbilities();
 }
 
 // Called when the game starts or when spawned
@@ -109,6 +117,7 @@ void ACCharacter::BindGASChangeDelegates()
 	{
 		CAbilitySystemComponent->RegisterGameplayTagEvent(UCAbilitySystemStatics::GetDeadStatTag()).AddUObject(this, &ACCharacter::DeathTagUpdated);
 		CAbilitySystemComponent->RegisterGameplayTagEvent(UCAbilitySystemStatics::GetStunStatTag()).AddUObject(this, &ACCharacter::StunTagUpdated);
+		CAbilitySystemComponent->RegisterGameplayTagEvent(UCAbilitySystemStatics::GetAimStatTag()).AddUObject(this, &ACCharacter::AimTagUpdated);
 	}
 }
 
@@ -138,6 +147,22 @@ void ACCharacter::StunTagUpdated(const FGameplayTag Tag, int32 NewCount)
 		OnRecoveredFromStun();
 		StopAnimMontage(StunMontage);
 	}
+}
+
+void ACCharacter::AimTagUpdated(const FGameplayTag Tag, int32 NewCount)
+{
+	SetAimming(NewCount != 0);
+}
+
+void ACCharacter::SetAimming(bool bIsAimming)
+{
+	bUseControllerRotationYaw = bIsAimming;
+	GetCharacterMovement()->bOrientRotationToMovement = !bIsAimming;
+	OnAimStateChanged(bIsAimming);
+}
+
+void ACCharacter::OnAimStateChanged(bool bIsAimming)
+{
 }
 
 void ACCharacter::ConfigureOverHeadStatusWidget()

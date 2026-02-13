@@ -5,7 +5,10 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Widgets/ValueGauge.h"
+#include "Widgets/AbilityListView.h"
 #include "GAS/CAttributeSet.h"
+#include "GAS/CAbilitySystemComponent.h"
+#include "Widgets/AbilityListView.h"
 
 void UGameplayWidget::NativeConstruct()
 {
@@ -18,4 +21,9 @@ void UGameplayWidget::NativeConstruct()
 		HealthBar->SetAndBoundToGameplayAttirbute(OwnerAbilitySystemComponent, UCAttributeSet::GetHealthAttribute(), UCAttributeSet::GetMaxHealthAttribute());
 		ManaBar->SetAndBoundToGameplayAttirbute(OwnerAbilitySystemComponent, UCAttributeSet::GetManaAttribute(), UCAttributeSet::GetMaxManaAttribute());
 	}
+}
+
+void UGameplayWidget::ConfigureAbilities(const TMap<ECAbilityInputID, TSubclassOf<UGameplayAbility>>& Abilities)
+{
+	AbilityListView->ConfigureAbilities(Abilities);
 }

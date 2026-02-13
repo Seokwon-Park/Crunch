@@ -2,6 +2,7 @@
 
 
 #include "Player/CPlayerCharacter.h"
+#include "Crunch/Crunch.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GAS/CAbilitySystemStatics.h"
@@ -18,12 +19,12 @@ ACPlayerCharacter::ACPlayerCharacter()
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>("Camera Boom");
 	CameraBoom->SetupAttachment(GetRootComponent());
 	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->ProbeChannel = ECC_SpringArm;
 
 	ViewCam = CreateDefaultSubobject<UCameraComponent>("View Cam");
 	ViewCam->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 
 	bUseControllerRotationYaw = false;
-
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
 }
@@ -134,6 +135,28 @@ void ACPlayerCharacter::OnRespawn()
 	SetInputEnabledFromPlayerController(true);
 }
 
+void ACPlayerCharacter::LerpCameraToLocalOffsetLocation(const FVector& Goal)
+{
+	GetWorldTimerManager().ClearTimer(CameraLerpTimerHandle);
+	GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &ACPlayerCharacter::TickCameraLocalOffsetLerp, Goal));
+}
+
+void ACPlayerCharacter::TickCameraLocalOffsetLerp(FVector Goal)
+{
+	FVector CurrentLocalOffset = ViewCam->GetRelativeLocation();
+	if (FVector::Dist(CurrentLocalOffset, Goal) < 1.f)
+	{
+		ViewCam->SetRelativeLocation(Goal);
+		return;
+	}
+
+	float LerpAlpha = FMath::Clamp(GetWorld()->GetDeltaSeconds() * CameraLerpSpeed, 0.f, 1.f);
+	FVector NewLocalOffset = FMath::Lerp(CurrentLocalOffset, Goal, LerpAlpha);
+	ViewCam->SetRelativeLocation(NewLocalOffset);
+
+	GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &ACPlayerCharacter::TickCameraLocalOffsetLerp, Goal));
+}
+
 
 FVector ACPlayerCharacter::GetLookRightDir() const
 {
@@ -148,4 +171,9 @@ FVector ACPlayerCharacter::GetLookFwdDir() const
 FVector ACPlayerCharacter::GetMoveFwdDir() const
 {
 	return FVector::CrossProduct(GetLookRightDir(), FVector::UpVector);
+}
+
+void ACPlayerCharacter::OnAimStateChanged(bool bIsAimming)
+{
+	LerpCameraToLocalOffsetLocation(bIsAimming ? CameraAimLocalOffset : FVector(0.f));
 }
